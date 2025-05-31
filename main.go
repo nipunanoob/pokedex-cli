@@ -32,6 +32,10 @@ var commandList map[string]cliCommand
 func initializeCommands() map[string]cliCommand{
 	nextURL := "https://pokeapi.co/api/v2/location-area/"
 	previousURL := ""
+	locationURLs := LocationResponse{
+		Next: &nextURL,
+		Previous: &previousURL,
+	}
 	commands := map[string]cliCommand {
 		"exit": {
 			name: "exit",
@@ -45,12 +49,15 @@ func initializeCommands() map[string]cliCommand{
 		},
 		"map": {
 			name: "map",
-			description: "Displays 20 location areas in Pokemon. Each call will display next 20 locations",
+			description: "Displays next 20 areas in Pokemon game.",
 			callback:  commandMap,
-			LocationResponse: &LocationResponse{
-				Next: &nextURL,
-				Previous: &previousURL,	
-			},
+			LocationResponse: &locationURLs,
+		},
+		"mapb": {
+			name: "mapb",
+			description: "Displays previous 20 areas in Pokemon game.",
+			callback:  commandMapBack,
+			LocationResponse: &locationURLs,
 		},
 	}
 	return commands
@@ -107,17 +114,69 @@ func commandMap() error {
 	if mapCmd.LocationResponse == nil || mapCmd.LocationResponse.Next == nil {
 		return fmt.Errorf("No next URL found")
 	}
+
 	res, err := http.Get(*mapCmd.LocationResponse.Next)
 	if err != nil {
-		return fmt.Errorf("Error: %w", err)
+		return fmt.Errorf("Url not accessible: %w", err)
 	}
+	
 	body, err := io.ReadAll(res.Body)
 	defer res.Body.Close()
 	if res.StatusCode > 299 {
-		return fmt.Errorf("Response not successful: %d", res.StatusCode)
+		return fmt.Errorf("Returned unsuccessful status code: %d", res.StatusCode)
 	}
 	if err != nil {
-		return fmt.Errorf("Error: %w", err)
+		return fmt.Errorf("Unable to read response body: %w", err)
+	}
+
+	var locRes LocationResponse
+	err = json.Unmarshal(body, &locRes)
+	if err != nil {
+		return fmt.Errorf("Error unmarshalling: %w", err)
+	}
+	for _, loc := range locRes.Results {
+        fmt.Println(loc.Name)
+    }
+	
+	if locRes.Next != nil {
+		mapCmd.LocationResponse.Next = locRes.Next
+	} else {
+		mapCmd.LocationResponse.Next = nil
+	}
+
+	if locRes.Previous != nil {
+		mapCmd.LocationResponse.Previous = locRes.Previous
+	} else {
+		mapCmd.LocationResponse.Previous = nil
+	}
+	
+	return nil
+}
+
+func commandMapBack() error {
+	mapCmd := commandList["map"]
+
+	if mapCmd.LocationResponse == nil {
+		return fmt.Errorf("Location response struct is empty?")
+	}
+
+	if mapCmd.LocationResponse.Previous == nil {
+		fmt.Println("You are on first page")
+		return nil
+	}
+
+	res, err := http.Get(*mapCmd.LocationResponse.Previous)
+	if err != nil {
+		return fmt.Errorf("Url not accessible: %w", err)
+	}
+
+	body, err := io.ReadAll(res.Body)
+	defer res.Body.Close()
+	if res.StatusCode > 299 {
+		return fmt.Errorf("Returned unsuccessful status code: %d", res.StatusCode)
+	}
+	if err != nil {
+		return fmt.Errorf("Unable to read response body: %w", err)
 	}
 
 	var locRes LocationResponse
